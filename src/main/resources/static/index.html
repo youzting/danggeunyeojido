@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>당근 전국 검색</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Karrot National Search</p>
+      <h1>당근 전국 검색</h1>
+    </div>
+    <span class="source-badge">REST API</span>
+  </header>
+
+  <main class="app-layout">
+    <section class="search-panel" aria-label="검색 조건">
+      <form id="searchForm">
+        <label>
+          <span>검색어</span>
+          <input id="keyword" name="keyword" type="search" value="맥북" autocomplete="off" required>
+        </label>
+
+        <button type="submit">검색</button>
+      </form>
+    </section>
+
+    <section class="workspace" aria-label="검색 결과">
+      <div class="map-panel">
+        <div class="map-shape" aria-hidden="true">
+          <span style="--x: 48%; --y: 18%"></span>
+          <span style="--x: 36%; --y: 34%"></span>
+          <span style="--x: 56%; --y: 47%"></span>
+          <span style="--x: 68%; --y: 62%"></span>
+          <span style="--x: 42%; --y: 72%"></span>
+          <span style="--x: 30%; --y: 90%"></span>
+        </div>
+        <div class="metric-row">
+          <div>
+            <span>커버리지</span>
+            <strong id="coverage">-</strong>
+          </div>
+          <div>
+            <span>검색 거점</span>
+            <strong id="stepCount">-</strong>
+          </div>
+          <div>
+            <span>최적 반경</span>
+            <strong id="radius">-</strong>
+          </div>
+        </div>
+        <p id="routeSummary" class="route-summary">검색어만 입력하면 전국 커버 거점이 자동 계산됩니다.</p>
+      </div>
+
+      <div class="content-grid">
+        <section>
+          <div class="section-head">
+            <h2>이동 경로</h2>
+          </div>
+          <ol id="steps" class="steps"></ol>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>검색 결과</h2>
+            <span id="listingCount">0건</span>
+          </div>
+          <div id="listings" class="listings"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
