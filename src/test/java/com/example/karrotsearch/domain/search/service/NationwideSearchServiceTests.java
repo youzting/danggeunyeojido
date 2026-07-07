@@ -29,6 +29,23 @@ class NationwideSearchServiceTests {
   }
 
   @Test
+  void searchBuildsFiftyKmHubGridByDefault() {
+    NationwideSearchRequest request = new NationwideSearchRequest();
+    request.setKeyword("맥북");
+    request.setStartRegionId("seoul-gangnam");
+
+    NationwideSearchResponse response = nationwideSearchService.search(request);
+
+    assertThat(response.getSteps()).isNotEmpty();
+    assertThat(response.getOptimizedRadiusKm()).isEqualTo(50);
+    assertThat(response.getStrategy()).isEqualTo("FIFTY_KM_HUB_GRID");
+    assertThat(response.getSearchRegionCount()).isEqualTo(12);
+    assertThat(response.getCoveragePercent()).isEqualTo(100.0);
+    assertThat(response.getRemainingRegions()).isEmpty();
+    assertThat(response.getListings()).isNotEmpty();
+  }
+
+  @Test
   void searchMovesToUncoveredRegionsUntilNationwideCatalogIsCovered() {
     NationwideSearchRequest request = new NationwideSearchRequest();
     request.setKeyword("맥북");
@@ -39,6 +56,8 @@ class NationwideSearchServiceTests {
     NationwideSearchResponse response = nationwideSearchService.search(request);
 
     assertThat(response.getSteps()).isNotEmpty();
+    assertThat(response.getOptimizedRadiusKm()).isEqualTo(80);
+    assertThat(response.getStrategy()).isEqualTo("MANUAL_RADIUS");
     assertThat(response.getCoveragePercent()).isEqualTo(100.0);
     assertThat(response.getRemainingRegions()).isEmpty();
     assertThat(response.getListings()).isNotEmpty();

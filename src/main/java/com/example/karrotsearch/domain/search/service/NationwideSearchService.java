@@ -23,9 +23,7 @@ public class NationwideSearchService {
 
   private static final String DEFAULT_REGION_ID = "seoul-gangnam";
   private static final int DEFAULT_MAX_STOPS = 24;
-  private static final int TARGET_MAX_STOPS = 12;
-  private static final List<Integer> AUTO_RADIUS_CANDIDATES =
-      List.of(8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 120, 150, 200);
+  private static final int HUB_SPACING_KM = 50;
 
   private final RegionRepository regionRepository;
   private final ListingSearchRepository listingSearchRepository;
@@ -41,7 +39,7 @@ public class NationwideSearchService {
     long planningStartedAt = System.nanoTime();
     SearchPlan plan =
         request.getRadiusKm() == null
-            ? buildOptimizedPlan(request.getStartRegionId(), request.getMaxStops())
+            ? buildFiftyKmHubPlan(request.getStartRegionId(), request.getMaxStops())
             : buildPlan(
                 request.getStartRegionId(),
                 request.getRadiusKm(),
@@ -64,30 +62,9 @@ public class NationwideSearchService {
     return NationwideSearchResponse.of(plan, listings, metrics);
   }
 
-  private SearchPlan buildOptimizedPlan(String startRegionId, Integer maxStops) {
+  private SearchPlan buildFiftyKmHubPlan(String startRegionId, Integer maxStops) {
     int stopLimit = maxStops == null ? DEFAULT_MAX_STOPS : maxStops;
-
-    SearchPlan fallback = null;
-    for (int radiusKm : AUTO_RADIUS_CANDIDATES) {
-      SearchPlan plan = buildPlan(startRegionId, radiusKm, stopLimit, "AUTO_OPTIMIZED_RADIUS");
-      if (fallback == null || isBetter(plan, fallback)) {
-        fallback = plan;
-      }
-      if (plan.getRemainingRegions().isEmpty() && plan.getSteps().size() <= TARGET_MAX_STOPS) {
-        return plan;
-      }
-    }
-    return fallback;
-  }
-
-  private boolean isBetter(SearchPlan candidate, SearchPlan currentBest) {
-    if (candidate.getRemainingRegions().size() != currentBest.getRemainingRegions().size()) {
-      return candidate.getRemainingRegions().size() < currentBest.getRemainingRegions().size();
-    }
-    if (candidate.getSteps().size() != currentBest.getSteps().size()) {
-      return candidate.getSteps().size() < currentBest.getSteps().size();
-    }
-    return candidate.getTotalMoveKm() < currentBest.getTotalMoveKm();
+    return buildPlan(startRegionId, HUB_SPACING_KM, stopLimit, "FIFTY_KM_HUB_GRID");
   }
 
   private SearchPlan buildPlan(String startRegionId, int radiusKm, int maxStops, String strategy) {
