@@ -156,11 +156,14 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       }
     }
 
-    if (sameDistrict != null) {
-      return sameDistrict;
-    }
     if (sameProviderName != null) {
       return sameProviderName;
+    }
+    if (hasProviderRegion(region)) {
+      return null;
+    }
+    if (sameDistrict != null) {
+      return sameDistrict;
     }
 
     JsonNode first = locations.get(0);
