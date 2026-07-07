@@ -59,25 +59,36 @@
 - Profile: `daangn`
 - Provider: `daangn-public-web`
 - Keyword: `맥북`
-- API: `GET /api/search/nationwide?keyword=맥북&maxStops=3`
-- 검색 거점: 3개
-- 최적 반경: 200km
+- API: `GET /api/search/nationwide?keyword=맥북`
+- Result limit: `search.provider.daangn.max-results-per-region=0`
+- 검색 거점: 12개
+- 최적 반경: 50km
 - 커버리지: 100%
-- 결과 수: 6건
+- 결과 수: 245건
 
 측정 결과:
 
 | HTTP ms | Planning ms | Listing ms | Total ms |
 | ---: | ---: | ---: | ---: |
-| 660 | 47 | 445 | 495 |
+| 4108 | 29 | 3898 | 3927 |
 
 해석:
 
 - 실제 공급자에서는 병목이 거점 계산이 아니라 외부 HTTP 요청이다.
-- 3개 거점만 조회해도 `listingFetchTimeMs`가 전체 처리 시간의 대부분을 차지한다.
-- 실제 전국 검색에서 거점 수가 증가하면 병렬화, 캐싱, rate limit 제어가 필요하다.
+- 12개 거점 전체 검색에서 `listingFetchTimeMs`가 전체 처리 시간의 대부분을 차지한다.
+- 이후 성능 개선은 거점 계산보다 외부 요청 병렬화, 캐싱, rate limit 제어에 집중하는 편이 효과적이다.
 
 ## 실제 공급자 연결 시 발견한 이슈
+
+### 0. 공개 응답 페이지 단위 수집
+
+초기 구현은 지역별 결과를 애플리케이션에서 5건으로 제한했다. 전국 검색의 실제 결과 수와 성능 병목을 확인하려면 공급자가 내려준 응답 페이지 전체를 봐야 하므로 기본 제한을 제거했다.
+
+확인:
+
+- `search.provider.daangn.max-results-per-region=0`이면 애플리케이션에서 결과를 자르지 않는다.
+- 양수로 설정하면 지역별 최대 결과 수를 제한한다.
+- 현재 확인한 `_data=routes/kr.buy-sell._index` 응답에는 `cursor`, `next`, `hasMore` 같은 추가 페이지 키가 없어, 기본 구현의 "전체"는 공개 응답 페이지에 포함된 전체 결과를 의미한다.
 
 ### 1. 지역명 해석 불안정
 
@@ -117,4 +128,3 @@ jeonnam-mokpo -> 상동-2766
 3. 검색어 + 거점 id 기준 캐시를 추가한다.
 4. 중복 URL 기준 결과 중복 제거를 강화한다.
 5. 3개, 6개, 12개 거점 기준 P50/P95 응답 시간을 반복 측정한다.
-

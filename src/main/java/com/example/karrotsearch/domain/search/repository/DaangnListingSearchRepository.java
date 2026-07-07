@@ -42,7 +42,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
 
-  @Value("${search.provider.daangn.max-results-per-region:5}")
+  @Value("${search.provider.daangn.max-results-per-region:0}")
   private int maxResultsPerRegion;
 
   @Override
@@ -126,7 +126,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
       List<SearchListing> listings = new ArrayList<>();
       for (JsonNode article : articles) {
-        if (listings.size() >= maxResultsPerRegion) {
+        if (maxResultsPerRegion > 0 && listings.size() >= maxResultsPerRegion) {
           break;
         }
         listings.add(toListing(article, sourceRegion, daangnRegion, sequence));
