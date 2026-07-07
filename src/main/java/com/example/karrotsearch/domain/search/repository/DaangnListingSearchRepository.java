@@ -15,6 +15,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -41,6 +43,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
   private final Map<String, DaangnRegion> scrapedRegionCache = new ConcurrentHashMap<>();
+  private final Map<String, CachedBody> searchBodyCache = new ConcurrentHashMap<>();
 
   @Value("${search.provider.daangn.max-results-per-region:0}")
   private int maxResultsPerRegion;
@@ -63,6 +66,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   @Value("${search.provider.daangn.max-sibling-regions-per-hub:6}")
   private int maxSiblingRegionsPerHub;
 
+  @Value("${search.provider.daangn.cache-ttl-minutes:30}")
+  private long cacheTtlMinutes;
+
   @Override
   public List<SearchListing> search(String keyword, SearchPlan plan) {
     Map<String, SearchListing> deduplicated = new LinkedHashMap<>();
@@ -82,6 +88,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       recordCoverage(keyword, daangnRegion, daangnRegion, CoverageType.SELF);
       for (DaangnRegion siblingRegion : scrapeResult.siblingRegions()) {
         recordCoverage(keyword, daangnRegion, siblingRegion, CoverageType.SIBLING);
+      }
+      for (DaangnRegion observedRegion : scrapeResult.observedResultRegions()) {
+        recordObservedResultCoverage(keyword, daangnRegion, observedRegion);
       }
       for (SearchListing listing : scrapeResult.listings()) {
         deduplicated.putIfAbsent(listing.getUrl(), listing);
@@ -120,6 +129,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         for (DaangnRegion nestedSiblingRegion : siblingScrapeResult.siblingRegions()) {
           recordCoverage(keyword, siblingRegion, nestedSiblingRegion, CoverageType.SIBLING);
         }
+        for (DaangnRegion observedRegion : siblingScrapeResult.observedResultRegions()) {
+          recordObservedResultCoverage(keyword, siblingRegion, observedRegion);
+        }
         for (SearchListing listing : siblingScrapeResult.listings()) {
           deduplicated.putIfAbsent(listing.getUrl(), listing);
         }
@@ -142,6 +154,14 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         coveredRegion.name(),
         coverageType,
         keyword);
+  }
+
+  private void recordObservedResultCoverage(
+      String keyword, DaangnRegion sourceRegion, DaangnRegion observedRegion) {
+    if (sourceRegion.id().equals(observedRegion.id())) {
+      return;
+    }
+    recordCoverage(keyword, sourceRegion, observedRegion, CoverageType.OBSERVED_RESULT);
   }
 
   @Override
@@ -264,23 +284,24 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
               + encode(keyword)
               + "&only_on_sale=true&_data=routes/kr.buy-sell._index";
 
-      ScrapeResponse response = readBody(url);
+      ScrapeResponse response = readSearchBody(keyword, daangnRegion, url);
       if (response.rateLimited()) {
-        return new ScrapeResult(List.of(), List.of(), true);
+        return new ScrapeResult(List.of(), List.of(), List.of(), true);
       }
       String body = response.body();
       if (body == null || body.isBlank()) {
         log.warn("당근 검색 응답 본문 없음. keyword={}, region={}", keyword, sourceRegion.getName());
-        return new ScrapeResult(List.of(), List.of(), false);
+        return new ScrapeResult(List.of(), List.of(), List.of(), false);
       }
 
       JsonNode root = objectMapper.readTree(body);
       JsonNode articles = root.path("allPage").path("fleamarketArticles");
       if (!articles.isArray()) {
-        return new ScrapeResult(List.of(), siblingRegions(root, daangnRegion), false);
+        return new ScrapeResult(List.of(), siblingRegions(root, daangnRegion), List.of(), false);
       }
 
       List<SearchListing> listings = new ArrayList<>();
+      Map<String, DaangnRegion> observedResultRegions = new LinkedHashMap<>();
       for (JsonNode article : articles) {
         if (maxResultsPerRegion > 0 && listings.size() >= maxResultsPerRegion) {
           break;
@@ -288,13 +309,30 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         if (sequence > 1 && isDirectBuyListing(article)) {
           continue;
         }
+        DaangnRegion observedRegion = articleRegion(article, daangnRegion);
+        observedResultRegions.putIfAbsent(observedRegion.id(), observedRegion);
         listings.add(toListing(article, sourceRegion, daangnRegion, sequence));
       }
-      return new ScrapeResult(listings, siblingRegions(root, daangnRegion), false);
+      return new ScrapeResult(
+          listings, siblingRegions(root, daangnRegion), List.copyOf(observedResultRegions.values()), false);
     } catch (Exception e) {
       log.warn("당근 검색 실패. keyword={}, region={}", keyword, sourceRegion.getName(), e);
-      return new ScrapeResult(List.of(), List.of(), false);
+      return new ScrapeResult(List.of(), List.of(), List.of(), false);
     }
+  }
+
+  private ScrapeResponse readSearchBody(String keyword, DaangnRegion daangnRegion, String url) {
+    String cacheKey = keyword + "|" + daangnRegion.id();
+    CachedBody cachedBody = searchBodyCache.get(cacheKey);
+    if (cachedBody != null && !cachedBody.expired(cacheTtlMinutes)) {
+      return new ScrapeResponse(200, cachedBody.body());
+    }
+
+    ScrapeResponse response = readBody(url);
+    if (response.statusCode() >= 200 && response.statusCode() < 300 && response.body() != null) {
+      searchBodyCache.put(cacheKey, new CachedBody(response.body(), Instant.now()));
+    }
+    return response;
   }
 
   private List<DaangnRegion> siblingRegions(JsonNode root, DaangnRegion currentRegion) {
@@ -390,7 +428,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     String href = article.path("href").asText("");
     Long priceValue = parsePrice(article.path("price").asText(""));
     String price = formatPrice(priceValue, article.path("price").asText(""));
-    String articleRegion = article.path("region").path("name").asText(daangnRegion.name());
+    String articleRegion = articleRegion(article, daangnRegion).name();
     boolean directBuy = isDirectBuyListing(article);
 
     return SearchListing.builder()
@@ -403,6 +441,16 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         .url(href.isBlank() ? BASE_URL : href)
         .directBuy(directBuy)
         .build();
+  }
+
+  private DaangnRegion articleRegion(JsonNode article, DaangnRegion fallbackRegion) {
+    JsonNode region = article.path("region");
+    String id = region.path("dbId").asText(fallbackRegion.id());
+    String name = region.path("name").asText(fallbackRegion.name());
+    if (id == null || id.isBlank() || name == null || name.isBlank()) {
+      return fallbackRegion;
+    }
+    return new DaangnRegion(id, name);
   }
 
   private Long parsePrice(String rawPrice) {
@@ -507,7 +555,17 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   }
 
   private record ScrapeResult(
-      List<SearchListing> listings, List<DaangnRegion> siblingRegions, boolean rateLimited) {}
+      List<SearchListing> listings,
+      List<DaangnRegion> siblingRegions,
+      List<DaangnRegion> observedResultRegions,
+      boolean rateLimited) {}
+
+  private record CachedBody(String body, Instant cachedAt) {
+
+    private boolean expired(long ttlMinutes) {
+      return ttlMinutes <= 0 || cachedAt.plus(Duration.ofMinutes(ttlMinutes)).isBefore(Instant.now());
+    }
+  }
 
   private record DaangnRegion(String id, String name) {}
 }

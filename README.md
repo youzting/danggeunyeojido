@@ -130,11 +130,14 @@ search.provider.daangn.scrape-region-hubs=true
 search.provider.daangn.expand-sibling-regions=true
 search.provider.daangn.max-expanded-region-requests=120
 search.provider.daangn.max-sibling-regions-per-hub=6
+search.provider.daangn.cache-ttl-minutes=30
 ```
 
 `scrape-region-hubs=true`이면 검색 거점의 실제 당근 동네를 공개 지역 검색 응답으로 먼저 해석하고, 실패하면 저장된 대표 동네 매핑으로 fallback합니다. `403` 또는 `429`가 감지되면 해당 검색의 남은 거점 요청을 중단합니다.
 
 `expand-sibling-regions=true`이면 거점 검색 응답에 포함된 같은 시군구의 형제 동네를 추가로 순회합니다. 예를 들어 `부산 해운대구 · 우동` 거점은 우동만 검색하지 않고 좌동, 중동, 재송동, 반여동 같은 주변 동네를 추가 검색한 뒤 URL 기준으로 중복 제거합니다. `max-sibling-regions-per-hub`는 특정 거점이 확장 요청을 독점하지 않도록 거점별 확장 수를 제한하고, `max-expanded-region-requests=0`이면 전체 확장 요청 수 제한을 두지 않습니다.
+
+웹 검색 응답에서 매물의 실제 동네가 검색 기준 동네와 다르면 `OBSERVED_RESULT` 커버리지로 저장합니다. `cache-ttl-minutes` 동안 같은 검색어와 당근 동네 ID의 공개 웹 응답 본문을 재사용해 반복 요청을 줄입니다.
 
 API:
 
