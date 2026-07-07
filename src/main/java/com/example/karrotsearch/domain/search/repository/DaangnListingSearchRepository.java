@@ -40,6 +40,12 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   @Value("${search.provider.daangn.max-results-per-region:0}")
   private int maxResultsPerRegion;
 
+  @Value("${search.provider.daangn.request-delay-ms:300}")
+  private long requestDelayMs;
+
+  @Value("${search.provider.daangn.stop-on-rate-limit:true}")
+  private boolean stopOnRateLimit;
+
   @Override
   public List<SearchListing> search(String keyword, SearchPlan plan) {
     Map<String, SearchListing> deduplicated = new LinkedHashMap<>();
@@ -51,8 +57,13 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         continue;
       }
 
-      for (SearchListing listing : searchRegion(keyword, region, daangnRegion, step.getSequence())) {
+      ScrapeResult scrapeResult = searchRegion(keyword, region, daangnRegion, step.getSequence());
+      for (SearchListing listing : scrapeResult.listings()) {
         deduplicated.putIfAbsent(listing.getUrl(), listing);
+      }
+      if (scrapeResult.rateLimited() && stopOnRateLimit) {
+        log.warn("당근 스크래퍼 요청 제한으로 남은 거점 검색을 중단합니다. keyword={}", keyword);
+        break;
       }
     }
 
@@ -61,7 +72,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
   @Override
   public String providerName() {
-    return "daangn-public-web";
+    return "daangn-public-web-scraper";
   }
 
   private DaangnRegion resolveRegion(Region region) {
@@ -72,7 +83,11 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     for (String keyword : regionKeywords(region)) {
       try {
         String url = BASE_URL + "/kr/api/v1/regions/keyword?keyword=" + encode(keyword);
-        String body = readBody(url);
+        ScrapeResponse response = readBody(url);
+        if (response.rateLimited()) {
+          return null;
+        }
+        String body = response.body();
         if (body == null || body.isBlank()) {
           continue;
         }
@@ -102,7 +117,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     return value != null && !value.isBlank();
   }
 
-  private List<SearchListing> searchRegion(
+  private ScrapeResult searchRegion(
       String keyword, Region sourceRegion, DaangnRegion daangnRegion, int sequence) {
     try {
       String regionParam = daangnRegion.name() + "-" + daangnRegion.id();
@@ -114,16 +129,20 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
               + encode(keyword)
               + "&only_on_sale=true&_data=routes/kr.buy-sell._index";
 
-      String body = readBody(url);
+      ScrapeResponse response = readBody(url);
+      if (response.rateLimited()) {
+        return new ScrapeResult(List.of(), true);
+      }
+      String body = response.body();
       if (body == null || body.isBlank()) {
         log.warn("당근 검색 응답 본문 없음. keyword={}, region={}", keyword, sourceRegion.getName());
-        return List.of();
+        return new ScrapeResult(List.of(), false);
       }
 
       JsonNode root = objectMapper.readTree(body);
       JsonNode articles = root.path("allPage").path("fleamarketArticles");
       if (!articles.isArray()) {
-        return List.of();
+        return new ScrapeResult(List.of(), false);
       }
 
       List<SearchListing> listings = new ArrayList<>();
@@ -136,10 +155,10 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         }
         listings.add(toListing(article, sourceRegion, daangnRegion, sequence));
       }
-      return listings;
+      return new ScrapeResult(listings, false);
     } catch (Exception e) {
       log.warn("당근 검색 실패. keyword={}, region={}", keyword, sourceRegion.getName(), e);
-      return List.of();
+      return new ScrapeResult(List.of(), false);
     }
   }
 
@@ -256,8 +275,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
   }
 
-  private String readBody(String url) {
+  private ScrapeResponse readBody(String url) {
     try {
+      waitBeforeRequest();
       HttpRequest request =
           HttpRequest.newBuilder(URI.create(url))
               .header("Accept", "application/json,text/plain,*/*")
@@ -268,14 +288,29 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
               .build();
       HttpResponse<String> response =
           httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      if (response.statusCode() == 403 || response.statusCode() == 429) {
+        log.warn("당근 스크래퍼 요청 제한 감지. status={}, url={}", response.statusCode(), url);
+        return new ScrapeResponse(response.statusCode(), null);
+      }
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         log.warn("당근 HTTP 응답 실패. status={}, url={}", response.statusCode(), url);
-        return null;
+        return new ScrapeResponse(response.statusCode(), null);
       }
-      return response.body();
+      return new ScrapeResponse(response.statusCode(), response.body());
     } catch (Exception e) {
       log.warn("당근 HTTP 요청 실패. url={}", url, e);
-      return null;
+      return new ScrapeResponse(0, null);
+    }
+  }
+
+  private void waitBeforeRequest() {
+    if (requestDelayMs <= 0) {
+      return;
+    }
+    try {
+      Thread.sleep(requestDelayMs);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
     }
   }
 
@@ -291,6 +326,15 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
     return keywords.stream().distinct().toList();
   }
+
+  private record ScrapeResponse(int statusCode, String body) {
+
+    private boolean rateLimited() {
+      return statusCode == 403 || statusCode == 429;
+    }
+  }
+
+  private record ScrapeResult(List<SearchListing> listings, boolean rateLimited) {}
 
   private record DaangnRegion(String id, String name) {}
 }

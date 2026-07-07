@@ -4,7 +4,7 @@
 
 당근마켓처럼 사용자가 특정 지역을 기준으로 검색해야 하는 환경에서는 전국 매물을 찾으려면 지역을 직접 바꿔가며 반복 검색해야 합니다. 당근여지도는 사용자가 `맥북` 같은 검색어만 입력하면, 서버가 전국을 50km 단위로 커버할 수 있는 검색 거점을 생성하고 결과를 통합해 보여주는 프로토타입입니다.
 
-> 기본 실행은 Mock 공급자를 사용합니다. `daangn` 프로필에서는 공개 웹 응답을 읽는 실험용 공급자로 교체되며, 외부 서비스 정책과 이용 약관을 준수하는 범위에서 포트폴리오 성능 측정 용도로 사용합니다.
+> 기본 실행은 Mock 공급자를 사용합니다. `daangn` 프로필에서는 공식 API가 아니라 공개 웹 응답을 읽는 실험용 스크래퍼로 교체되며, 외부 서비스 정책과 이용 약관을 준수하는 범위에서 포트폴리오 성능 측정 용도로 사용합니다.
 
 ## 문제 정의
 
@@ -83,7 +83,7 @@ src/main/java/com/example/karrotsearch
 - `RegionRepository`: 지역 앵커 조회
 - `ListingSearchRepository`: 외부 검색 공급자 추상화
 - `MockListingSearchRepository`: 현재 프로토타입용 목 검색 결과 생성
-- `DaangnListingSearchRepository`: `daangn` 프로필에서 공개 웹 응답 기반 검색 결과 수집
+- `DaangnListingSearchRepository`: `daangn` 프로필에서 공개 웹 응답 기반 스크래핑 결과 수집
 
 ## 실행
 
@@ -116,6 +116,15 @@ set SPRING_PROFILES_ACTIVE=daangn&& set SERVER_PORT=8081&& gradlew.bat bootRun
 ```
 
 `search.provider.daangn.max-results-per-region=0`이면 지역별 응답 페이지에 포함된 결과를 자르지 않고 모두 수집합니다. 양수로 바꾸면 성능 테스트나 디버깅을 위해 지역별 결과 수를 제한할 수 있습니다.
+
+스크래퍼 보호 설정:
+
+```properties
+search.provider.daangn.request-delay-ms=300
+search.provider.daangn.stop-on-rate-limit=true
+```
+
+`403` 또는 `429`가 감지되면 해당 검색의 남은 거점 요청을 중단합니다.
 
 API:
 
@@ -157,7 +166,7 @@ Windows:
 ## 포트폴리오 포인트
 
 - 단순 CRUD가 아니라 검색 커버리지 최적화 문제를 도메인 문제로 정의했다.
-- 외부 검색 공급자와 경로 계산 로직을 분리해 교체 가능성을 확보했다.
+- 공식 API가 없는 외부 검색 공급자를 공개 웹 스크래퍼로 분리해 교체 가능성을 확보했다.
 - 검색 거점 선택 알고리즘의 한계와 개선 방향을 문서로 남겼다.
 - 실제 개발 중 발생한 404, 루트 JSON 응답, H2 DevTools 경고를 트러블슈팅 문서로 정리했다.
 - Mock 공급자와 실제 공개 웹 데이터 공급자 기준 검색 속도를 분리 측정했다.
