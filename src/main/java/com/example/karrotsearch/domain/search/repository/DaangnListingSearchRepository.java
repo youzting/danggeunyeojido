@@ -51,9 +51,18 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   @Value("${search.provider.daangn.scrape-region-hubs:true}")
   private boolean scrapeRegionHubs;
 
+  @Value("${search.provider.daangn.expand-sibling-regions:true}")
+  private boolean expandSiblingRegions;
+
+  @Value("${search.provider.daangn.max-expanded-region-requests:80}")
+  private int maxExpandedRegionRequests;
+
   @Override
   public List<SearchListing> search(String keyword, SearchPlan plan) {
     Map<String, SearchListing> deduplicated = new LinkedHashMap<>();
+    Map<String, DaangnRegion> searchedRegions = new LinkedHashMap<>();
+    int expandedRegionRequests = 0;
+    boolean expansionBudgetExhausted = false;
 
     for (CoverageStep step : plan.getSteps()) {
       Region region = step.getRegion();
@@ -61,6 +70,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       if (daangnRegion == null) {
         continue;
       }
+      searchedRegions.putIfAbsent(daangnRegion.id(), daangnRegion);
 
       ScrapeResult scrapeResult = searchRegion(keyword, region, daangnRegion, step.getSequence());
       for (SearchListing listing : scrapeResult.listings()) {
@@ -69,6 +79,35 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       if (scrapeResult.rateLimited() && stopOnRateLimit) {
         log.warn("당근 스크래퍼 요청 제한으로 남은 거점 검색을 중단합니다. keyword={}", keyword);
         break;
+      }
+      if (!expandSiblingRegions || expansionBudgetExhausted) {
+        continue;
+      }
+
+      for (DaangnRegion siblingRegion : scrapeResult.siblingRegions()) {
+        if (searchedRegions.containsKey(siblingRegion.id())) {
+          continue;
+        }
+        if (maxExpandedRegionRequests > 0 && expandedRegionRequests >= maxExpandedRegionRequests) {
+          log.info(
+              "당근 주변 동네 확장 검색 상한에 도달했습니다. keyword={}, maxExpandedRegionRequests={}",
+              keyword,
+              maxExpandedRegionRequests);
+          expansionBudgetExhausted = true;
+          break;
+        }
+
+        searchedRegions.put(siblingRegion.id(), siblingRegion);
+        expandedRegionRequests++;
+        ScrapeResult siblingScrapeResult =
+            searchRegion(keyword, region, siblingRegion, step.getSequence());
+        for (SearchListing listing : siblingScrapeResult.listings()) {
+          deduplicated.putIfAbsent(listing.getUrl(), listing);
+        }
+        if (siblingScrapeResult.rateLimited() && stopOnRateLimit) {
+          log.warn("당근 스크래퍼 요청 제한으로 주변 동네 확장 검색을 중단합니다. keyword={}", keyword);
+          return List.copyOf(deduplicated.values());
+        }
       }
     }
 
@@ -197,18 +236,18 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
       ScrapeResponse response = readBody(url);
       if (response.rateLimited()) {
-        return new ScrapeResult(List.of(), true);
+        return new ScrapeResult(List.of(), List.of(), true);
       }
       String body = response.body();
       if (body == null || body.isBlank()) {
         log.warn("당근 검색 응답 본문 없음. keyword={}, region={}", keyword, sourceRegion.getName());
-        return new ScrapeResult(List.of(), false);
+        return new ScrapeResult(List.of(), List.of(), false);
       }
 
       JsonNode root = objectMapper.readTree(body);
       JsonNode articles = root.path("allPage").path("fleamarketArticles");
       if (!articles.isArray()) {
-        return new ScrapeResult(List.of(), false);
+        return new ScrapeResult(List.of(), siblingRegions(root, daangnRegion), false);
       }
 
       List<SearchListing> listings = new ArrayList<>();
@@ -221,11 +260,32 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         }
         listings.add(toListing(article, sourceRegion, daangnRegion, sequence));
       }
-      return new ScrapeResult(listings, false);
+      return new ScrapeResult(listings, siblingRegions(root, daangnRegion), false);
     } catch (Exception e) {
       log.warn("당근 검색 실패. keyword={}, region={}", keyword, sourceRegion.getName(), e);
-      return new ScrapeResult(List.of(), false);
+      return new ScrapeResult(List.of(), List.of(), false);
     }
+  }
+
+  private List<DaangnRegion> siblingRegions(JsonNode root, DaangnRegion currentRegion) {
+    JsonNode siblings = root.path("regionFilterOptions").path("siblingRegions");
+    if (!siblings.isArray()) {
+      return List.of();
+    }
+
+    List<DaangnRegion> regions = new ArrayList<>();
+    for (JsonNode sibling : siblings) {
+      if (sibling.path("depth").asInt() != 3) {
+        continue;
+      }
+      String id = sibling.path("id").asText("");
+      String name = sibling.path("name").asText("");
+      if (id.isBlank() || name.isBlank() || id.equals(currentRegion.id())) {
+        continue;
+      }
+      regions.add(new DaangnRegion(id, name));
+    }
+    return regions;
   }
 
   private boolean isDirectBuyListing(JsonNode article) {
@@ -305,7 +365,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         .title(article.path("title").asText("제목 없음"))
         .price(price)
         .regionName(articleRegion)
-        .searchedFrom(sequence + "번째 거점 · " + sourceRegion.getName())
+        .searchedFrom(sequence + "번째 거점 · " + sourceRegion.getName() + " · " + daangnRegion.name())
         .postedAt(formatPostedAt(article.path("createdAt").asText("")))
         .url(href.isBlank() ? BASE_URL : href)
         .build();
@@ -406,7 +466,8 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     }
   }
 
-  private record ScrapeResult(List<SearchListing> listings, boolean rateLimited) {}
+  private record ScrapeResult(
+      List<SearchListing> listings, List<DaangnRegion> siblingRegions, boolean rateLimited) {}
 
   private record DaangnRegion(String id, String name) {}
 }

@@ -123,9 +123,13 @@ set SPRING_PROFILES_ACTIVE=daangn&& set SERVER_PORT=8081&& gradlew.bat bootRun
 search.provider.daangn.request-delay-ms=300
 search.provider.daangn.stop-on-rate-limit=true
 search.provider.daangn.scrape-region-hubs=true
+search.provider.daangn.expand-sibling-regions=true
+search.provider.daangn.max-expanded-region-requests=80
 ```
 
 `scrape-region-hubs=true`이면 검색 거점의 실제 당근 동네를 공개 지역 검색 응답으로 먼저 해석하고, 실패하면 저장된 대표 동네 매핑으로 fallback합니다. `403` 또는 `429`가 감지되면 해당 검색의 남은 거점 요청을 중단합니다.
+
+`expand-sibling-regions=true`이면 거점 검색 응답에 포함된 같은 시군구의 형제 동네를 추가로 순회합니다. 예를 들어 `부산 해운대구 · 우동` 거점은 우동만 검색하지 않고 좌동, 중동, 재송동, 반여동 같은 주변 동네를 추가 검색한 뒤 URL 기준으로 중복 제거합니다. `max-expanded-region-requests=0`이면 확장 요청 수 제한을 두지 않습니다.
 
 API:
 
