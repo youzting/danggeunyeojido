@@ -29,6 +29,8 @@
 
 `daangn` 프로필에서는 거리 반경만으로 실제 검색 범위를 판단하지 않는다. 공개 웹 응답에서 관측한 형제 동네와 검색 결과 동네를 `RegionCoverage`로 저장하고, 이후 검색 계획에서 이 관측 커버리지 맵을 greedy set cover 점수로 활용한다. 관측 데이터가 부족한 초기 상태에서는 전국으로 빠르게 퍼지는 거리 분산 전략을 fallback으로 사용한다.
 
+검색 중 발견한 당근 동네 ID/name은 `ProviderRegion` 마스터 데이터로 함께 저장한다. 이 데이터와 `RegionCoverage`를 합치면 현재까지 관측된 동네 중 어떤 동네를 대표 거점으로 검색해야 가장 많은 미커버 동네를 덮는지 계산할 수 있다.
+
 현재 샘플 데이터 기준 `맥북` 검색 결과:
 
 ```text
@@ -45,6 +47,7 @@ coveragePercent = 100.0
 - 전국 커버용 검색 거점 자동 선택
 - 거점별 이동 경로와 커버리지 제공
 - 당근 공개 응답 기반 관측 커버리지 맵 적재
+- 검색 중 발견한 당근 동네 ID/name 마스터 누적
 - 관측 커버리지 기반 greedy set cover 거점 선택
 - 실제 공급자 검색을 위한 지역별 대표 동네 id/name 매핑
 - REST API 기반 3레이어 아키텍처
@@ -139,12 +142,16 @@ search.provider.daangn.cache-ttl-minutes=30
 
 웹 검색 응답에서 매물의 실제 동네가 검색 기준 동네와 다르면 `OBSERVED_RESULT` 커버리지로 저장합니다. `cache-ttl-minutes` 동안 같은 검색어와 당근 동네 ID의 공개 웹 응답 본문을 재사용해 반복 요청을 줄입니다.
 
+검색 과정에서 발견한 당근 동네는 `provider_regions` 테이블에 누적됩니다. `/api/search/provider-hubs`는 이 동네 마스터와 관측 커버리지를 바탕으로 현재 데이터 기준 대표 거점 후보를 greedy 방식으로 계산합니다.
+
 API:
 
 ```text
 GET /api/search/nationwide?keyword=맥북
 GET /api/search/regions
+GET /api/search/provider-regions
 GET /api/search/coverage
+GET /api/search/provider-hubs?maxHubs=50
 ```
 
 테스트:

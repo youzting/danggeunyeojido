@@ -3,9 +3,12 @@ package com.example.karrotsearch.domain.search.controller;
 import com.example.karrotsearch.common.dto.ApiResponse;
 import com.example.karrotsearch.domain.search.dto.request.NationwideSearchRequest;
 import com.example.karrotsearch.domain.search.dto.response.NationwideSearchResponse;
+import com.example.karrotsearch.domain.search.dto.response.ProviderCoveragePlanResponse;
+import com.example.karrotsearch.domain.search.dto.response.ProviderRegionResponse;
 import com.example.karrotsearch.domain.search.dto.response.RegionCoverageResponse;
 import com.example.karrotsearch.domain.search.dto.response.RegionResponse;
 import com.example.karrotsearch.domain.search.service.NationwideSearchService;
+import com.example.karrotsearch.domain.search.service.ProviderCoveragePlanningService;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,12 +27,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class SearchController {
 
   private final NationwideSearchService nationwideSearchService;
+  private final ProviderCoveragePlanningService providerCoveragePlanningService;
 
   @GetMapping("/")
   public ResponseEntity<ApiResponse<Map<String, String>>> getApiGuide() {
     Map<String, String> guide = new LinkedHashMap<>();
     guide.put("regions", "GET /api/search/regions");
+    guide.put("providerRegions", "GET /api/search/provider-regions");
     guide.put("coverage", "GET /api/search/coverage");
+    guide.put("providerHubs", "GET /api/search/provider-hubs?maxHubs=50");
     guide.put(
         "nationwide",
         "GET /api/search/nationwide?keyword=맥북&startRegionId=seoul-gangnam&radiusKm=80&maxStops=24");
@@ -40,9 +47,20 @@ public class SearchController {
     return ResponseEntity.ok(ApiResponse.ok(nationwideSearchService.findRegions()));
   }
 
+  @GetMapping("/provider-regions")
+  public ResponseEntity<ApiResponse<List<ProviderRegionResponse>>> getProviderRegions() {
+    return ResponseEntity.ok(ApiResponse.ok(providerCoveragePlanningService.findProviderRegions()));
+  }
+
   @GetMapping("/coverage")
   public ResponseEntity<ApiResponse<List<RegionCoverageResponse>>> getObservedCoverages() {
     return ResponseEntity.ok(ApiResponse.ok(nationwideSearchService.findObservedCoverages()));
+  }
+
+  @GetMapping("/provider-hubs")
+  public ResponseEntity<ApiResponse<ProviderCoveragePlanResponse>> getProviderHubs(
+      @RequestParam(required = false) Integer maxHubs) {
+    return ResponseEntity.ok(ApiResponse.ok(providerCoveragePlanningService.buildCoveragePlan(maxHubs)));
   }
 
   @GetMapping("/nationwide")

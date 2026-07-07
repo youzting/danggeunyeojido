@@ -1,6 +1,8 @@
 package com.example.karrotsearch.domain.search.service;
 
+import com.example.karrotsearch.domain.search.entity.ProviderRegion;
 import com.example.karrotsearch.domain.search.entity.Region;
+import com.example.karrotsearch.domain.search.repository.ProviderRegionRepository;
 import com.example.karrotsearch.domain.search.repository.RegionRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -14,16 +16,22 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegionSeedService implements ApplicationRunner {
 
   private final RegionRepository regionRepository;
+  private final ProviderRegionRepository providerRegionRepository;
 
   @Override
   @Transactional
   public void run(ApplicationArguments args) {
-    if (regionRepository.count() > 0) {
-      return;
+    if (regionRepository.count() == 0) {
+      regionRepository.saveAll(seedRegions());
     }
 
-    regionRepository.saveAll(
-        List.of(
+    if (providerRegionRepository.count() == 0) {
+      seedProviderRegions(regionRepository.findAll());
+    }
+  }
+
+  private List<Region> seedRegions() {
+    return List.of(
             Region.create("seoul-gangnam", "서울 강남구", "서울", 37.5172, 127.0473, "6035", "역삼동"),
             Region.create("seoul-jongno", "서울 종로구", "서울", 37.5735, 126.9788, "6", "부암동"),
             Region.create("seoul-mapo", "서울 마포구", "서울", 37.5663, 126.9016, "237", "상암동"),
@@ -47,6 +55,20 @@ public class RegionSeedService implements ApplicationRunner {
             Region.create("gyeongnam-changwon", "경남 창원시", "경남", 35.2285, 128.6811, "3478", "상남동"),
             Region.create("gyeongnam-jinju", "경남 진주시", "경남", 35.1800, 128.1076, "3560", "평거동"),
             Region.create("jeju-jeju", "제주 제주시", "제주", 33.4996, 126.5312, "3835", "노형동"),
-            Region.create("jeju-seogwipo", "제주 서귀포시", "제주", 33.2539, 126.5596, "3840", "대정읍")));
+            Region.create("jeju-seogwipo", "제주 서귀포시", "제주", 33.2539, 126.5596, "3840", "대정읍"));
+  }
+
+  private void seedProviderRegions(List<Region> regions) {
+    for (Region region : regions) {
+      if (region.getProviderRegionId() == null
+          || region.getProviderRegionId().isBlank()
+          || region.getProviderRegionName() == null
+          || region.getProviderRegionName().isBlank()) {
+        continue;
+      }
+      providerRegionRepository.save(
+          ProviderRegion.create(
+              region.getProviderRegionId(), region.getProviderRegionName(), "daangn", "region-seed"));
+    }
   }
 }

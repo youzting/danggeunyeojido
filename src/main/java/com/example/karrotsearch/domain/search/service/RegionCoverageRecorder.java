@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegionCoverageRecorder {
 
   private final RegionCoverageRepository regionCoverageRepository;
+  private final ProviderRegionRecorder providerRegionRecorder;
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void record(
@@ -28,6 +29,9 @@ public class RegionCoverageRecorder {
         || coveredProviderRegionId.isBlank()) {
       return;
     }
+
+    providerRegionRecorder.record(sourceProviderRegionId, sourceProviderRegionName, "coverage-source");
+    providerRegionRecorder.record(coveredProviderRegionId, coveredProviderRegionName, "coverage-covered");
 
     regionCoverageRepository
         .findBySourceProviderRegionIdAndCoveredProviderRegionId(
