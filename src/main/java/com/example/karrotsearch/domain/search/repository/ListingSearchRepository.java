@@ -8,4 +8,8 @@ import java.util.List;
 public interface ListingSearchRepository {
 
   List<SearchListing> search(String keyword, SearchPlan plan);
+
+  default String providerName() {
+    return "unknown";
+  }
 }

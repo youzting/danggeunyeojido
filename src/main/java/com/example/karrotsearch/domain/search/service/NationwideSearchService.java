@@ -37,6 +37,8 @@ public class NationwideSearchService {
   }
 
   public NationwideSearchResponse search(NationwideSearchRequest request) {
+    long totalStartedAt = System.nanoTime();
+    long planningStartedAt = System.nanoTime();
     SearchPlan plan =
         request.getRadiusKm() == null
             ? buildOptimizedPlan(request.getStartRegionId(), request.getMaxStops())
@@ -45,9 +47,21 @@ public class NationwideSearchService {
                 request.getRadiusKm(),
                 request.getMaxStops() == null ? DEFAULT_MAX_STOPS : request.getMaxStops(),
                 "MANUAL_RADIUS");
-    List<SearchListing> listings = listingSearchRepository.search(request.getKeyword(), plan);
+    long planningTimeMs = elapsedMs(planningStartedAt);
 
-    return NationwideSearchResponse.of(plan, listings);
+    long listingFetchStartedAt = System.nanoTime();
+    List<SearchListing> listings = listingSearchRepository.search(request.getKeyword(), plan);
+    long listingFetchTimeMs = elapsedMs(listingFetchStartedAt);
+
+    SearchExecutionMetrics metrics =
+        SearchExecutionMetrics.builder()
+            .planningTimeMs(planningTimeMs)
+            .listingFetchTimeMs(listingFetchTimeMs)
+            .totalElapsedTimeMs(elapsedMs(totalStartedAt))
+            .listingProvider(listingSearchRepository.providerName())
+            .build();
+
+    return NationwideSearchResponse.of(plan, listings, metrics);
   }
 
   private SearchPlan buildOptimizedPlan(String startRegionId, Integer maxStops) {
@@ -78,6 +92,7 @@ public class NationwideSearchService {
 
   private SearchPlan buildPlan(String startRegionId, int radiusKm, int maxStops, String strategy) {
     List<Region> regions = regionRepository.findAllByOrderByProvinceAscNameAsc();
+    RegionDistanceMatrix distanceMatrix = new RegionDistanceMatrix(regions);
     Set<Region> covered = new LinkedHashSet<>();
     Set<Region> selected = new LinkedHashSet<>();
     List<CoverageStep> steps = new ArrayList<>();
@@ -85,19 +100,19 @@ public class NationwideSearchService {
     Region previous = null;
 
     for (int sequence = 1; sequence <= maxStops; sequence++) {
-      Region current = selectNextRegion(startRegionId, regions, covered, selected, previous, radiusKm);
+      Region current =
+          selectNextRegion(startRegionId, regions, covered, selected, previous, radiusKm, distanceMatrix);
       if (current == null) {
         break;
       }
       selected.add(current);
 
-      double movedKm =
-          previous == null ? 0 : GeoDistanceCalculator.kilometersBetween(previous, current);
+      double movedKm = previous == null ? 0 : distanceMatrix.distance(previous, current);
       totalMoveKm += movedKm;
 
       List<Region> newlyCovered =
           regions.stream()
-              .filter(region -> GeoDistanceCalculator.kilometersBetween(current, region) <= radiusKm)
+              .filter(region -> distanceMatrix.distance(current, region) <= radiusKm)
               .filter(region -> !covered.contains(region))
               .toList();
       covered.addAll(newlyCovered);
@@ -137,7 +152,8 @@ public class NationwideSearchService {
       Set<Region> covered,
       Set<Region> selected,
       Region previous,
-      int radiusKm) {
+      int radiusKm,
+      RegionDistanceMatrix distanceMatrix) {
     if (previous == null && startRegionId != null && !startRegionId.isBlank()) {
       return findStartRegion(startRegionId);
     }
@@ -145,31 +161,37 @@ public class NationwideSearchService {
     return regions.stream()
         .filter(region -> !selected.contains(region))
         .max(
-            Comparator.comparingInt((Region region) -> countNewlyCovered(region, regions, covered, radiusKm))
-                .thenComparingDouble(region -> distanceScore(previous, region)))
-        .filter(region -> countNewlyCovered(region, regions, covered, radiusKm) > 0)
-        .orElseGet(() -> findFarthestUncoveredRegion(previous, regions, covered));
+            Comparator.comparingInt(
+                    (Region region) ->
+                        countNewlyCovered(region, regions, covered, radiusKm, distanceMatrix))
+                .thenComparingDouble(region -> distanceScore(previous, region, distanceMatrix)))
+        .filter(region -> countNewlyCovered(region, regions, covered, radiusKm, distanceMatrix) > 0)
+        .orElseGet(() -> findFarthestUncoveredRegion(previous, regions, covered, distanceMatrix));
   }
 
   private int countNewlyCovered(
-      Region candidate, List<Region> regions, Set<Region> covered, int radiusKm) {
+      Region candidate,
+      List<Region> regions,
+      Set<Region> covered,
+      int radiusKm,
+      RegionDistanceMatrix distanceMatrix) {
     return (int)
         regions.stream()
             .filter(region -> !covered.contains(region))
-            .filter(region -> GeoDistanceCalculator.kilometersBetween(candidate, region) <= radiusKm)
+            .filter(region -> distanceMatrix.distance(candidate, region) <= radiusKm)
             .count();
   }
 
-  private double distanceScore(Region previous, Region candidate) {
+  private double distanceScore(Region previous, Region candidate, RegionDistanceMatrix distanceMatrix) {
     if (previous == null) {
-      return -distanceFromNationalCenter(candidate);
+      return -distanceFromNationalCenter(candidate, distanceMatrix);
     }
-    return -GeoDistanceCalculator.kilometersBetween(previous, candidate);
+    return -distanceMatrix.distance(previous, candidate);
   }
 
-  private double distanceFromNationalCenter(Region candidate) {
+  private double distanceFromNationalCenter(Region candidate, RegionDistanceMatrix distanceMatrix) {
     Region center = findStartRegion(DEFAULT_REGION_ID);
-    return GeoDistanceCalculator.kilometersBetween(center, candidate);
+    return distanceMatrix.distance(center, candidate);
   }
 
   private Region findStartRegion(String startRegionId) {
@@ -180,13 +202,13 @@ public class NationwideSearchService {
   }
 
   private Region findFarthestUncoveredRegion(
-      Region current, List<Region> regions, Set<Region> covered) {
+      Region current, List<Region> regions, Set<Region> covered, RegionDistanceMatrix distanceMatrix) {
     if (current == null) {
       return regions.stream().filter(region -> !covered.contains(region)).findFirst().orElse(null);
     }
     return regions.stream()
         .filter(region -> !covered.contains(region))
-        .max(Comparator.comparingDouble(region -> GeoDistanceCalculator.kilometersBetween(current, region)))
+        .max(Comparator.comparingDouble(region -> distanceMatrix.distance(current, region)))
         .orElse(current);
   }
 
@@ -199,5 +221,9 @@ public class NationwideSearchService {
 
   private double round(double value) {
     return Math.round(value * 10.0) / 10.0;
+  }
+
+  private long elapsedMs(long startedAt) {
+    return (System.nanoTime() - startedAt) / 1_000_000;
   }
 }

@@ -100,6 +100,18 @@ Windows:
 http://localhost:8080/
 ```
 
+실제 공개 웹 데이터 공급자 프로필:
+
+```bash
+SPRING_PROFILES_ACTIVE=daangn SERVER_PORT=8081 ./gradlew bootRun
+```
+
+Windows:
+
+```cmd
+set SPRING_PROFILES_ACTIVE=daangn&& set SERVER_PORT=8081&& gradlew.bat bootRun
+```
+
 API:
 
 ```text
@@ -143,11 +155,12 @@ Windows:
 - 외부 검색 공급자와 경로 계산 로직을 분리해 교체 가능성을 확보했다.
 - 검색 거점 선택 알고리즘의 한계와 개선 방향을 문서로 남겼다.
 - 실제 개발 중 발생한 404, 루트 JSON 응답, H2 DevTools 경고를 트러블슈팅 문서로 정리했다.
+- Mock 공급자와 실제 공개 웹 데이터 공급자 기준 검색 속도를 분리 측정했다.
 
 ## 문서
 
 - [아키텍처](docs/architecture.md)
 - [검색 거점 최적화](docs/search-optimization.md)
+- [성능 측정 결과](docs/performance-results.md)
 - [성능 개선 계획](docs/performance-plan.md)
 - [트러블슈팅 기록](docs/troubleshooting.md)
-

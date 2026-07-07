@@ -147,3 +147,5 @@ plan:{regionVersion}:{maxStops}:{targetCoverage}
 - 검색 전체 응답 시간 P50/P95/P99
 
 추후 Micrometer와 Spring Boot Actuator를 추가하면 지표 수집이 쉬워진다.
+
+현재 측정 결과는 [성능 측정 결과](performance-results.md)에 정리했다.

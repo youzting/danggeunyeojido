@@ -8,9 +8,11 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@Profile("!daangn")
 public class MockListingSearchRepository implements ListingSearchRepository {
 
   private static final NumberFormat PRICE_FORMAT = NumberFormat.getNumberInstance(Locale.KOREA);
@@ -26,6 +28,11 @@ public class MockListingSearchRepository implements ListingSearchRepository {
       listings.add(createListing(keyword, step.getRegion(), step.getSequence(), "급처"));
     }
     return listings;
+  }
+
+  @Override
+  public String providerName() {
+    return "mock";
   }
 
   private SearchListing createListing(String keyword, Region region, int sequence, String prefix) {

@@ -3,6 +3,10 @@ const coverage = document.querySelector("#coverage");
 const stepCount = document.querySelector("#stepCount");
 const radius = document.querySelector("#radius");
 const routeSummary = document.querySelector("#routeSummary");
+const planningTime = document.querySelector("#planningTime");
+const listingFetchTime = document.querySelector("#listingFetchTime");
+const totalElapsedTime = document.querySelector("#totalElapsedTime");
+const listingProvider = document.querySelector("#listingProvider");
 const steps = document.querySelector("#steps");
 const listings = document.querySelector("#listings");
 const listingCount = document.querySelector("#listingCount");
@@ -22,6 +26,10 @@ function renderResult(data) {
   stepCount.textContent = data.searchRegionCount;
   radius.textContent = `${data.optimizedRadiusKm}km`;
   routeSummary.textContent = `${data.searchRegionCount}개 거점으로 전국을 순회합니다. 예상 이동거리 ${data.totalMoveKm}km`;
+  planningTime.textContent = `${data.planningTimeMs}ms`;
+  listingFetchTime.textContent = `${data.listingFetchTimeMs}ms`;
+  totalElapsedTime.textContent = `${data.totalElapsedTimeMs}ms`;
+  listingProvider.textContent = data.listingProvider;
   listingCount.textContent = `${data.listings.length}건`;
 
   steps.innerHTML = "";
