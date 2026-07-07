@@ -62,6 +62,8 @@ domain/search
 
 현재 목표 거점 수는 `12`개다.
 
+검색 거점 산출 기준과 한계는 [검색 거점 최적화](search-optimization.md)에 별도로 정리했다.
+
 ## Repository
 
 `RegionRepository`는 JPA 기반 지역 앵커 저장소다.
@@ -93,4 +95,3 @@ src/main/resources/static/js/app.js
 ```
 
 프론트엔드는 검색어만 서버에 전달하고, 서버가 반환한 최적 반경, 거점 수, 이동 경로, 검색 결과를 렌더링한다.
-

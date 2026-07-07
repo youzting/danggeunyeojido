@@ -53,6 +53,8 @@ coveragePercent = 100.0
 
 현재는 새로 커버하는 지역 수가 가장 큰 거점을 선택하는 탐욕 알고리즘이다.
 
+현재 거점 선택 방식의 상세 기준은 [검색 거점 최적화](search-optimization.md)에 정리했다.
+
 장점:
 
 - 구현이 단순하다.
@@ -145,4 +147,3 @@ plan:{regionVersion}:{maxStops}:{targetCoverage}
 - 검색 전체 응답 시간 P50/P95/P99
 
 추후 Micrometer와 Spring Boot Actuator를 추가하면 지표 수집이 쉬워진다.
-
