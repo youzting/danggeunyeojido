@@ -80,6 +80,11 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     return "daangn-public-web-scraper";
   }
 
+  @Override
+  public boolean supportsDistanceCoverage() {
+    return false;
+  }
+
   private DaangnRegion resolveRegion(Region region) {
     if (scrapeRegionHubs) {
       DaangnRegion scraped = scrapedRegionCache.computeIfAbsent(region.getId(), id -> scrapeRegion(region));

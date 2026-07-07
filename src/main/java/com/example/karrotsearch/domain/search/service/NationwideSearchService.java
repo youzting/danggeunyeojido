@@ -64,12 +64,17 @@ public class NationwideSearchService {
 
   private SearchPlan buildFiftyKmHubPlan(String startRegionId, Integer maxStops) {
     int stopLimit = maxStops == null ? DEFAULT_MAX_STOPS : maxStops;
-    return buildPlan(startRegionId, HUB_SPACING_KM, stopLimit, "FIFTY_KM_HUB_GRID");
+    String strategy =
+        listingSearchRepository.supportsDistanceCoverage()
+            ? "FIFTY_KM_HUB_GRID"
+            : "FIFTY_KM_PROVIDER_REGION_HUBS";
+    return buildPlan(startRegionId, HUB_SPACING_KM, stopLimit, strategy);
   }
 
   private SearchPlan buildPlan(String startRegionId, int radiusKm, int maxStops, String strategy) {
     List<Region> regions = regionRepository.findAllByOrderByProvinceAscNameAsc();
     RegionDistanceMatrix distanceMatrix = new RegionDistanceMatrix(regions);
+    boolean distanceCoverage = listingSearchRepository.supportsDistanceCoverage();
     Set<Region> covered = new LinkedHashSet<>();
     Set<Region> selected = new LinkedHashSet<>();
     List<CoverageStep> steps = new ArrayList<>();
@@ -78,7 +83,8 @@ public class NationwideSearchService {
 
     for (int sequence = 1; sequence <= maxStops; sequence++) {
       Region current =
-          selectNextRegion(startRegionId, regions, covered, selected, previous, radiusKm, distanceMatrix);
+          selectNextRegion(
+              startRegionId, regions, covered, selected, previous, radiusKm, distanceMatrix, distanceCoverage);
       if (current == null) {
         break;
       }
@@ -88,10 +94,7 @@ public class NationwideSearchService {
       totalMoveKm += movedKm;
 
       List<Region> newlyCovered =
-          regions.stream()
-              .filter(region -> distanceMatrix.distance(current, region) <= radiusKm)
-              .filter(region -> !covered.contains(region))
-              .toList();
+          findNewlyCoveredRegions(current, regions, covered, radiusKm, distanceMatrix, distanceCoverage);
       covered.addAll(newlyCovered);
 
       steps.add(
@@ -130,7 +133,8 @@ public class NationwideSearchService {
       Set<Region> selected,
       Region previous,
       int radiusKm,
-      RegionDistanceMatrix distanceMatrix) {
+      RegionDistanceMatrix distanceMatrix,
+      boolean distanceCoverage) {
     if (previous == null && startRegionId != null && !startRegionId.isBlank()) {
       return findStartRegion(startRegionId);
     }
@@ -140,10 +144,31 @@ public class NationwideSearchService {
         .max(
             Comparator.comparingInt(
                     (Region region) ->
-                        countNewlyCovered(region, regions, covered, radiusKm, distanceMatrix))
+                        countNewlyCovered(
+                            region, regions, covered, radiusKm, distanceMatrix, distanceCoverage))
                 .thenComparingDouble(region -> distanceScore(previous, region, distanceMatrix)))
-        .filter(region -> countNewlyCovered(region, regions, covered, radiusKm, distanceMatrix) > 0)
+        .filter(
+            region ->
+                countNewlyCovered(
+                        region, regions, covered, radiusKm, distanceMatrix, distanceCoverage)
+                    > 0)
         .orElseGet(() -> findFarthestUncoveredRegion(previous, regions, covered, distanceMatrix));
+  }
+
+  private List<Region> findNewlyCoveredRegions(
+      Region current,
+      List<Region> regions,
+      Set<Region> covered,
+      int radiusKm,
+      RegionDistanceMatrix distanceMatrix,
+      boolean distanceCoverage) {
+    if (!distanceCoverage) {
+      return covered.contains(current) ? List.of() : List.of(current);
+    }
+    return regions.stream()
+        .filter(region -> distanceMatrix.distance(current, region) <= radiusKm)
+        .filter(region -> !covered.contains(region))
+        .toList();
   }
 
   private int countNewlyCovered(
@@ -151,7 +176,11 @@ public class NationwideSearchService {
       List<Region> regions,
       Set<Region> covered,
       int radiusKm,
-      RegionDistanceMatrix distanceMatrix) {
+      RegionDistanceMatrix distanceMatrix,
+      boolean distanceCoverage) {
+    if (!distanceCoverage) {
+      return covered.contains(candidate) ? 0 : 1;
+    }
     return (int)
         regions.stream()
             .filter(region -> !covered.contains(region))

@@ -12,4 +12,8 @@ public interface ListingSearchRepository {
   default String providerName() {
     return "unknown";
   }
+
+  default boolean supportsDistanceCoverage() {
+    return true;
+  }
 }
