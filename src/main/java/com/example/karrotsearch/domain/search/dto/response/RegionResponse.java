@@ -13,6 +13,8 @@ public class RegionResponse {
   private final String province;
   private final double latitude;
   private final double longitude;
+  private final String providerRegionId;
+  private final String providerRegionName;
 
   public static RegionResponse from(Region region) {
     return RegionResponse.builder()
@@ -21,6 +23,8 @@ public class RegionResponse {
         .province(region.getProvince())
         .latitude(region.getLatitude())
         .longitude(region.getLongitude())
+        .providerRegionId(region.getProviderRegionId())
+        .providerRegionName(region.getProviderRegionName())
         .build();
   }
 }

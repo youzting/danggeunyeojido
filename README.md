@@ -41,6 +41,7 @@ coveragePercent = 100.0
 - 검색 반경 자동 산출
 - 전국 커버용 검색 거점 자동 선택
 - 거점별 이동 경로와 커버리지 제공
+- 실제 공급자 검색을 위한 지역별 대표 동네 id/name 매핑
 - REST API 기반 3레이어 아키텍처
 - 실제 검색 공급자 교체를 위한 Repository 인터페이스 분리
 - 포트폴리오 설명용 아키텍처, 성능 개선, 트러블슈팅 문서화
@@ -81,6 +82,7 @@ src/main/java/com/example/karrotsearch
 - `RegionRepository`: 지역 앵커 조회
 - `ListingSearchRepository`: 외부 검색 공급자 추상화
 - `MockListingSearchRepository`: 현재 프로토타입용 목 검색 결과 생성
+- `DaangnListingSearchRepository`: `daangn` 프로필에서 공개 웹 응답 기반 검색 결과 수집
 
 ## 실행
 
@@ -158,6 +160,7 @@ Windows:
 - 검색 거점 선택 알고리즘의 한계와 개선 방향을 문서로 남겼다.
 - 실제 개발 중 발생한 404, 루트 JSON 응답, H2 DevTools 경고를 트러블슈팅 문서로 정리했다.
 - Mock 공급자와 실제 공개 웹 데이터 공급자 기준 검색 속도를 분리 측정했다.
+- 전국 법정동 단위 감사로 대표 거점 검색의 한계와 rate limit 대응 방향을 정리했다.
 
 ## 문서
 

@@ -38,16 +38,43 @@ public class Region extends BaseEntity {
   @Column(nullable = false)
   private double longitude;
 
-  private Region(String id, String name, String province, double latitude, double longitude) {
+  @Column(length = 50)
+  private String providerRegionId;
+
+  @Column(length = 50)
+  private String providerRegionName;
+
+  private Region(
+      String id,
+      String name,
+      String province,
+      double latitude,
+      double longitude,
+      String providerRegionId,
+      String providerRegionName) {
     this.id = id;
     this.name = name;
     this.province = province;
     this.latitude = latitude;
     this.longitude = longitude;
+    this.providerRegionId = providerRegionId;
+    this.providerRegionName = providerRegionName;
   }
 
   public static Region create(
       String id, String name, String province, double latitude, double longitude) {
-    return new Region(id, name, province, latitude, longitude);
+    return new Region(id, name, province, latitude, longitude, null, null);
+  }
+
+  public static Region create(
+      String id,
+      String name,
+      String province,
+      double latitude,
+      double longitude,
+      String providerRegionId,
+      String providerRegionName) {
+    return new Region(
+        id, name, province, latitude, longitude, providerRegionId, providerRegionName);
   }
 }

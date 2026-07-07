@@ -3,7 +3,9 @@ package com.example.karrotsearch.domain.search.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.karrotsearch.domain.search.dto.request.NationwideSearchRequest;
+import com.example.karrotsearch.domain.search.dto.response.RegionResponse;
 import com.example.karrotsearch.domain.search.dto.response.NationwideSearchResponse;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,6 +14,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 class NationwideSearchServiceTests {
 
   @Autowired private NationwideSearchService nationwideSearchService;
+
+  @Test
+  void regionsExposeProviderRegionMappings() {
+    List<RegionResponse> regions = nationwideSearchService.findRegions();
+
+    assertThat(regions).hasSize(24);
+    assertThat(regions)
+        .allSatisfy(
+            region -> {
+              assertThat(region.getProviderRegionId()).isNotBlank();
+              assertThat(region.getProviderRegionName()).isNotBlank();
+            });
+  }
 
   @Test
   void searchMovesToUncoveredRegionsUntilNationwideCatalogIsCovered() {

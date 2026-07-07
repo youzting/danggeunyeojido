@@ -33,11 +33,6 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
   private static final DecimalFormat PRICE_FORMAT = new DecimalFormat("#,###");
   private static final String BASE_URL = "https://www.daangn.com";
-  private static final Map<String, DaangnRegion> REPRESENTATIVE_REGIONS =
-      Map.of(
-          "daejeon-seogu", new DaangnRegion("5793", "둔산동"),
-          "gyeongbuk-pohang", new DaangnRegion("3121", "죽도동"),
-          "jeonnam-mokpo", new DaangnRegion("2766", "상동"));
 
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
@@ -70,9 +65,8 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   }
 
   private DaangnRegion resolveRegion(Region region) {
-    DaangnRegion representative = REPRESENTATIVE_REGIONS.get(region.getId());
-    if (representative != null) {
-      return representative;
+    if (hasProviderRegion(region)) {
+      return new DaangnRegion(region.getProviderRegionId(), region.getProviderRegionName());
     }
 
     for (String keyword : regionKeywords(region)) {
@@ -98,6 +92,14 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
     log.warn("당근 지역 해석 결과 없음. region={}", region.getName());
     return null;
+  }
+
+  private boolean hasProviderRegion(Region region) {
+    return hasText(region.getProviderRegionId()) && hasText(region.getProviderRegionName());
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   private List<SearchListing> searchRegion(
@@ -129,6 +131,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         if (maxResultsPerRegion > 0 && listings.size() >= maxResultsPerRegion) {
           break;
         }
+        if (sequence > 1 && isDirectBuyListing(article)) {
+          continue;
+        }
         listings.add(toListing(article, sourceRegion, daangnRegion, sequence));
       }
       return listings;
@@ -136,6 +141,73 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       log.warn("당근 검색 실패. keyword={}, region={}", keyword, sourceRegion.getName(), e);
       return List.of();
     }
+  }
+
+  private boolean isDirectBuyListing(JsonNode article) {
+    return hasTruthyField(
+            article,
+            "isDirectBuy",
+            "directBuy",
+            "isBuyable",
+            "buyable",
+            "isShipping",
+            "shippingAvailable",
+            "isDelivery",
+            "deliveryAvailable")
+        || hasMetadataText(article, "바로구매")
+        || hasMetadataText(article, "direct_buy")
+        || hasMetadataText(article, "shipping");
+  }
+
+  private boolean hasTruthyField(JsonNode node, String... fieldNames) {
+    for (String fieldName : fieldNames) {
+      JsonNode value = node.path(fieldName);
+      if (value.isBoolean() && value.asBoolean()) {
+        return true;
+      }
+      if (value.isTextual() && "true".equalsIgnoreCase(value.asText())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean hasMetadataText(JsonNode node, String expectedText) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return false;
+    }
+    if (node.isTextual()) {
+      return node.asText("").toLowerCase().contains(expectedText.toLowerCase());
+    }
+    if (node.isArray()) {
+      for (JsonNode child : node) {
+        if (hasMetadataText(child, expectedText)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (node.isObject()) {
+      for (String fieldName :
+          List.of(
+              "badges",
+              "badge",
+              "labels",
+              "label",
+              "tags",
+              "tag",
+              "tradeType",
+              "tradeMethod",
+              "delivery",
+              "shipping",
+              "commerce",
+              "payment")) {
+        if (hasMetadataText(node.path(fieldName), expectedText)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private SearchListing toListing(
