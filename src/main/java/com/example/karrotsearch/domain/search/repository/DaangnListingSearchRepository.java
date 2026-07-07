@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
+  private final Map<String, DaangnRegion> scrapedRegionCache = new ConcurrentHashMap<>();
 
   @Value("${search.provider.daangn.max-results-per-region:0}")
   private int maxResultsPerRegion;
@@ -45,6 +47,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
   @Value("${search.provider.daangn.stop-on-rate-limit:true}")
   private boolean stopOnRateLimit;
+
+  @Value("${search.provider.daangn.scrape-region-hubs:true}")
+  private boolean scrapeRegionHubs;
 
   @Override
   public List<SearchListing> search(String keyword, SearchPlan plan) {
@@ -76,10 +81,21 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   }
 
   private DaangnRegion resolveRegion(Region region) {
+    if (scrapeRegionHubs) {
+      DaangnRegion scraped = scrapedRegionCache.computeIfAbsent(region.getId(), id -> scrapeRegion(region));
+      if (scraped != null) {
+        return scraped;
+      }
+    }
+
     if (hasProviderRegion(region)) {
       return new DaangnRegion(region.getProviderRegionId(), region.getProviderRegionName());
     }
 
+    return scrapeRegion(region);
+  }
+
+  private DaangnRegion scrapeRegion(Region region) {
     for (String keyword : regionKeywords(region)) {
       try {
         String url = BASE_URL + "/kr/api/v1/regions/keyword?keyword=" + encode(keyword);
@@ -98,8 +114,18 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
           continue;
         }
 
-        JsonNode first = locations.get(0);
-        return new DaangnRegion(first.path("id").asText(), first.path("name").asText());
+        JsonNode location = findBestLocation(region, locations);
+        if (location != null) {
+          DaangnRegion daangnRegion =
+              new DaangnRegion(location.path("id").asText(), location.path("name").asText());
+          log.debug(
+              "당근 거점 스크랩 완료. region={}, keyword={}, providerRegion={}-{}",
+              region.getName(),
+              keyword,
+              daangnRegion.name(),
+              daangnRegion.id());
+          return daangnRegion;
+        }
       } catch (Exception e) {
         log.debug("당근 지역 해석 실패. region={}, keyword={}", region.getName(), keyword, e);
       }
@@ -107,6 +133,38 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
     log.warn("당근 지역 해석 결과 없음. region={}", region.getName());
     return null;
+  }
+
+  private JsonNode findBestLocation(Region region, JsonNode locations) {
+    String regionName = region.getName();
+    String[] parts = regionName.split(" ");
+    String districtName = parts.length > 1 ? parts[parts.length - 1] : regionName;
+
+    JsonNode sameDistrict = null;
+    JsonNode sameProviderName = null;
+    for (JsonNode location : locations) {
+      if (location.path("depth").asInt() != 3) {
+        continue;
+      }
+      String name = location.path("name").asText("");
+      String name2 = location.path("name2").asText("");
+      if (hasProviderRegion(region) && name.equals(region.getProviderRegionName())) {
+        sameProviderName = location;
+      }
+      if (!districtName.isBlank() && name2.equals(districtName)) {
+        sameDistrict = location;
+      }
+    }
+
+    if (sameDistrict != null) {
+      return sameDistrict;
+    }
+    if (sameProviderName != null) {
+      return sameProviderName;
+    }
+
+    JsonNode first = locations.get(0);
+    return first != null && first.path("depth").asInt() == 3 ? first : null;
   }
 
   private boolean hasProviderRegion(Region region) {
@@ -321,7 +379,13 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
     String[] parts = name.split(" ");
     if (parts.length > 1) {
+      if (hasProviderRegion(region)) {
+        keywords.add(parts[parts.length - 1] + " " + region.getProviderRegionName());
+      }
       keywords.add(parts[parts.length - 1]);
+    }
+    if (hasProviderRegion(region)) {
+      keywords.add(region.getProviderRegionName());
     }
 
     return keywords.stream().distinct().toList();

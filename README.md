@@ -122,9 +122,10 @@ set SPRING_PROFILES_ACTIVE=daangn&& set SERVER_PORT=8081&& gradlew.bat bootRun
 ```properties
 search.provider.daangn.request-delay-ms=300
 search.provider.daangn.stop-on-rate-limit=true
+search.provider.daangn.scrape-region-hubs=true
 ```
 
-`403` 또는 `429`가 감지되면 해당 검색의 남은 거점 요청을 중단합니다.
+`scrape-region-hubs=true`이면 검색 거점의 실제 당근 동네를 공개 지역 검색 응답으로 먼저 해석하고, 실패하면 저장된 대표 동네 매핑으로 fallback합니다. `403` 또는 `429`가 감지되면 해당 검색의 남은 거점 요청을 중단합니다.
 
 API:
 
