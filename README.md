@@ -27,6 +27,8 @@
 5. 50km 거점 경로로 100% 커버되는 지역을 계산한다.
 6. 선택된 거점별 검색 결과를 통합해 응답한다.
 
+`daangn` 프로필에서는 거리 반경만으로 실제 검색 범위를 판단하지 않는다. 공개 웹 응답에서 관측한 형제 동네와 검색 결과 동네를 `RegionCoverage`로 저장하고, 이후 검색 계획에서 이 관측 커버리지 맵을 greedy set cover 점수로 활용한다. 관측 데이터가 부족한 초기 상태에서는 전국으로 빠르게 퍼지는 거리 분산 전략을 fallback으로 사용한다.
+
 현재 샘플 데이터 기준 `맥북` 검색 결과:
 
 ```text
@@ -42,6 +44,8 @@ coveragePercent = 100.0
 - 50km 단위 전국 검색 거점 생성
 - 전국 커버용 검색 거점 자동 선택
 - 거점별 이동 경로와 커버리지 제공
+- 당근 공개 응답 기반 관측 커버리지 맵 적재
+- 관측 커버리지 기반 greedy set cover 거점 선택
 - 실제 공급자 검색을 위한 지역별 대표 동네 id/name 매핑
 - REST API 기반 3레이어 아키텍처
 - 실제 검색 공급자 교체를 위한 Repository 인터페이스 분리
@@ -137,6 +141,7 @@ API:
 ```text
 GET /api/search/nationwide?keyword=맥북
 GET /api/search/regions
+GET /api/search/coverage
 ```
 
 테스트:

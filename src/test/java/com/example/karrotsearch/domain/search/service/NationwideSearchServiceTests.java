@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.karrotsearch.domain.search.dto.request.NationwideSearchRequest;
 import com.example.karrotsearch.domain.search.dto.response.RegionResponse;
 import com.example.karrotsearch.domain.search.dto.response.NationwideSearchResponse;
+import com.example.karrotsearch.domain.search.entity.CoverageType;
+import com.example.karrotsearch.domain.search.entity.RegionCoverage;
 import com.example.karrotsearch.domain.search.entity.SearchListing;
 import com.example.karrotsearch.domain.search.repository.ListingSearchRepository;
+import com.example.karrotsearch.domain.search.repository.RegionCoverageRepository;
 import com.example.karrotsearch.domain.search.repository.RegionRepository;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +22,12 @@ class NationwideSearchServiceTests {
 
   @Autowired private NationwideSearchService nationwideSearchService;
   @Autowired private RegionRepository regionRepository;
+  @Autowired private RegionCoverageRepository regionCoverageRepository;
+
+  @BeforeEach
+  void clearObservedCoverage() {
+    regionCoverageRepository.deleteAll();
+  }
 
   @Test
   void regionsExposeProviderRegionMappings() {
@@ -52,7 +62,8 @@ class NationwideSearchServiceTests {
   @Test
   void searchKeepsEveryProviderRegionWhenProviderDoesNotSupportDistanceCoverage() {
     NationwideSearchService exactProviderSearchService =
-        new NationwideSearchService(regionRepository, new ExactProviderListingSearchRepository());
+        new NationwideSearchService(
+            regionRepository, regionCoverageRepository, new ExactProviderListingSearchRepository());
     NationwideSearchRequest request = new NationwideSearchRequest();
     request.setKeyword("맥북");
     request.setStartRegionId("seoul-gangnam");
@@ -71,7 +82,8 @@ class NationwideSearchServiceTests {
   @Test
   void exactProviderSearchSpreadsEarlyStopsAcrossTheCountry() {
     NationwideSearchService exactProviderSearchService =
-        new NationwideSearchService(regionRepository, new ExactProviderListingSearchRepository());
+        new NationwideSearchService(
+            regionRepository, regionCoverageRepository, new ExactProviderListingSearchRepository());
     NationwideSearchRequest request = new NationwideSearchRequest();
     request.setKeyword("맥북");
     request.setStartRegionId("seoul-gangnam");
@@ -83,6 +95,25 @@ class NationwideSearchServiceTests {
     assertThat(response.getSteps())
         .extracting(step -> step.getRegion().getProvince())
         .contains("제주", "부산");
+  }
+
+  @Test
+  void exactProviderSearchUsesObservedCoverageForPlanning() {
+    regionCoverageRepository.save(
+        RegionCoverage.create("6035", "역삼동", "237", "상암동", CoverageType.SIBLING, "맥북"));
+    NationwideSearchService exactProviderSearchService =
+        new NationwideSearchService(
+            regionRepository, regionCoverageRepository, new ExactProviderListingSearchRepository());
+    NationwideSearchRequest request = new NationwideSearchRequest();
+    request.setKeyword("맥북");
+    request.setStartRegionId("seoul-gangnam");
+    request.setMaxStops(1);
+
+    NationwideSearchResponse response = exactProviderSearchService.search(request);
+
+    assertThat(response.getCoveredRegions())
+        .extracting(RegionResponse::getProviderRegionId)
+        .contains("6035", "237");
   }
 
   @Test

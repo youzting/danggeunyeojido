@@ -1,7 +1,9 @@
 package com.example.karrotsearch.domain.search.repository;
 
 import com.example.karrotsearch.domain.search.entity.Region;
+import com.example.karrotsearch.domain.search.entity.CoverageType;
 import com.example.karrotsearch.domain.search.entity.SearchListing;
+import com.example.karrotsearch.domain.search.service.RegionCoverageRecorder;
 import com.example.karrotsearch.domain.search.service.CoverageStep;
 import com.example.karrotsearch.domain.search.service.SearchPlan;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +37,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   private static final DecimalFormat PRICE_FORMAT = new DecimalFormat("#,###");
   private static final String BASE_URL = "https://www.daangn.com";
 
+  private final RegionCoverageRecorder regionCoverageRecorder;
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
   private final Map<String, DaangnRegion> scrapedRegionCache = new ConcurrentHashMap<>();
@@ -76,6 +79,10 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
       searchedRegions.putIfAbsent(daangnRegion.id(), daangnRegion);
 
       ScrapeResult scrapeResult = searchRegion(keyword, region, daangnRegion, step.getSequence());
+      recordCoverage(keyword, daangnRegion, daangnRegion, CoverageType.SELF);
+      for (DaangnRegion siblingRegion : scrapeResult.siblingRegions()) {
+        recordCoverage(keyword, daangnRegion, siblingRegion, CoverageType.SIBLING);
+      }
       for (SearchListing listing : scrapeResult.listings()) {
         deduplicated.putIfAbsent(listing.getUrl(), listing);
       }
@@ -109,6 +116,10 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         siblingRegionsForHub++;
         ScrapeResult siblingScrapeResult =
             searchRegion(keyword, region, siblingRegion, step.getSequence());
+        recordCoverage(keyword, siblingRegion, siblingRegion, CoverageType.SELF);
+        for (DaangnRegion nestedSiblingRegion : siblingScrapeResult.siblingRegions()) {
+          recordCoverage(keyword, siblingRegion, nestedSiblingRegion, CoverageType.SIBLING);
+        }
         for (SearchListing listing : siblingScrapeResult.listings()) {
           deduplicated.putIfAbsent(listing.getUrl(), listing);
         }
@@ -120,6 +131,17 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
     }
 
     return List.copyOf(deduplicated.values());
+  }
+
+  private void recordCoverage(
+      String keyword, DaangnRegion sourceRegion, DaangnRegion coveredRegion, CoverageType coverageType) {
+    regionCoverageRecorder.record(
+        sourceRegion.id(),
+        sourceRegion.name(),
+        coveredRegion.id(),
+        coveredRegion.name(),
+        coverageType,
+        keyword);
   }
 
   @Override
