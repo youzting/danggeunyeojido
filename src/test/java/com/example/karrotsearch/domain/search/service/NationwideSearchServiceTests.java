@@ -69,6 +69,23 @@ class NationwideSearchServiceTests {
   }
 
   @Test
+  void exactProviderSearchSpreadsEarlyStopsAcrossTheCountry() {
+    NationwideSearchService exactProviderSearchService =
+        new NationwideSearchService(regionRepository, new ExactProviderListingSearchRepository());
+    NationwideSearchRequest request = new NationwideSearchRequest();
+    request.setKeyword("맥북");
+    request.setStartRegionId("seoul-gangnam");
+    request.setMaxStops(8);
+
+    NationwideSearchResponse response = exactProviderSearchService.search(request);
+
+    assertThat(response.getSteps()).hasSize(8);
+    assertThat(response.getSteps())
+        .extracting(step -> step.getRegion().getProvince())
+        .contains("제주", "부산");
+  }
+
+  @Test
   void searchMovesToUncoveredRegionsUntilNationwideCatalogIsCovered() {
     NationwideSearchRequest request = new NationwideSearchRequest();
     request.setKeyword("맥북");

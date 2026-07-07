@@ -42,10 +42,12 @@ public class MockListingSearchRepository implements ListingSearchRepository {
     return SearchListing.builder()
         .title(prefix + " " + keyword)
         .price(PRICE_FORMAT.format(price) + "원")
+        .priceValue((long) price)
         .regionName(region.getName())
         .searchedFrom(sequence + "번째 이동 지역")
         .postedAt((sequence % 6 + 1) + "시간 전")
         .url("https://www.daangn.com/search/" + keyword.replace(" ", "%20"))
+        .directBuy(false)
         .build();
   }
 }

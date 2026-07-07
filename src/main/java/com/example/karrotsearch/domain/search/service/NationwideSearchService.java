@@ -135,8 +135,13 @@ public class NationwideSearchService {
       int radiusKm,
       RegionDistanceMatrix distanceMatrix,
       boolean distanceCoverage) {
-    if (previous == null && startRegionId != null && !startRegionId.isBlank()) {
-      return findStartRegion(startRegionId);
+    if (previous == null) {
+      return startRegionId == null || startRegionId.isBlank()
+          ? findStartRegion(DEFAULT_REGION_ID)
+          : findStartRegion(startRegionId);
+    }
+    if (!distanceCoverage) {
+      return selectNextSpreadRegion(regions, selected, distanceMatrix);
     }
 
     return regions.stream()
@@ -153,6 +158,25 @@ public class NationwideSearchService {
                         region, regions, covered, radiusKm, distanceMatrix, distanceCoverage)
                     > 0)
         .orElseGet(() -> findFarthestUncoveredRegion(previous, regions, covered, distanceMatrix));
+  }
+
+  private Region selectNextSpreadRegion(
+      List<Region> regions, Set<Region> selected, RegionDistanceMatrix distanceMatrix) {
+    return regions.stream()
+        .filter(region -> !selected.contains(region))
+        .max(Comparator.comparingDouble(region -> nearestSelectedDistance(region, selected, distanceMatrix)))
+        .orElse(null);
+  }
+
+  private double nearestSelectedDistance(
+      Region candidate, Set<Region> selected, RegionDistanceMatrix distanceMatrix) {
+    if (selected.isEmpty()) {
+      return 0;
+    }
+    return selected.stream()
+        .mapToDouble(selectedRegion -> distanceMatrix.distance(candidate, selectedRegion))
+        .min()
+        .orElse(0);
   }
 
   private List<Region> findNewlyCoveredRegions(

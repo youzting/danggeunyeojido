@@ -10,8 +10,10 @@ public class SearchListing {
 
   private final String title;
   private final String price;
+  private final Long priceValue;
   private final String regionName;
   private final String searchedFrom;
   private final String postedAt;
   private final String url;
+  private final boolean directBuy;
 }

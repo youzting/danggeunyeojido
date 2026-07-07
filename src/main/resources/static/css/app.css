@@ -130,6 +130,61 @@ button:hover {
   background: var(--accent-dark);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.progress-panel {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  background: #fbfcfb;
+}
+
+.progress-panel div:first-child,
+.result-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-panel span,
+.result-tools label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.progress-panel strong {
+  font-size: 20px;
+}
+
+.progress-panel p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 9px;
+  border-radius: 999px;
+  background: #e8eee8;
+}
+
+.progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 220ms ease;
+}
+
 .metric-row,
 .perf-panel,
 .content-grid {
@@ -239,7 +294,20 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
   margin-bottom: 14px;
+}
+
+.result-tools label {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-tools select {
+  width: 132px;
+  min-height: 36px;
 }
 
 .steps,
@@ -270,9 +338,30 @@ button:hover {
 
 .step-card span,
 .step-card small,
-.listing-card span {
+.listing-card span,
+.listing-card small {
   color: var(--muted);
   font-size: 13px;
+}
+
+.listing-card small {
+  display: block;
+  margin-top: 4px;
+}
+
+.listing-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin-left: 8px;
+  border: 1px solid rgba(255, 111, 15, 0.36);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--accent-dark);
+  background: rgba(255, 111, 15, 0.1);
+  font-size: 12px;
+  font-weight: 900;
+  vertical-align: middle;
 }
 
 .listing-card p {
@@ -319,5 +408,11 @@ button:hover {
   .step-card,
   .listing-card {
     align-items: flex-start;
+  }
+
+  .section-head,
+  .result-tools {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -57,6 +57,9 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   @Value("${search.provider.daangn.max-expanded-region-requests:80}")
   private int maxExpandedRegionRequests;
 
+  @Value("${search.provider.daangn.max-sibling-regions-per-hub:6}")
+  private int maxSiblingRegionsPerHub;
+
   @Override
   public List<SearchListing> search(String keyword, SearchPlan plan) {
     Map<String, SearchListing> deduplicated = new LinkedHashMap<>();
@@ -84,9 +87,13 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
         continue;
       }
 
+      int siblingRegionsForHub = 0;
       for (DaangnRegion siblingRegion : scrapeResult.siblingRegions()) {
         if (searchedRegions.containsKey(siblingRegion.id())) {
           continue;
+        }
+        if (maxSiblingRegionsPerHub > 0 && siblingRegionsForHub >= maxSiblingRegionsPerHub) {
+          break;
         }
         if (maxExpandedRegionRequests > 0 && expandedRegionRequests >= maxExpandedRegionRequests) {
           log.info(
@@ -99,6 +106,7 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
 
         searchedRegions.put(siblingRegion.id(), siblingRegion);
         expandedRegionRequests++;
+        siblingRegionsForHub++;
         ScrapeResult siblingScrapeResult =
             searchRegion(keyword, region, siblingRegion, step.getSequence());
         for (SearchListing listing : siblingScrapeResult.listings()) {
@@ -358,32 +366,42 @@ public class DaangnListingSearchRepository implements ListingSearchRepository {
   private SearchListing toListing(
       JsonNode article, Region sourceRegion, DaangnRegion daangnRegion, int sequence) {
     String href = article.path("href").asText("");
-    String price = formatPrice(article.path("price").asText(""));
+    Long priceValue = parsePrice(article.path("price").asText(""));
+    String price = formatPrice(priceValue, article.path("price").asText(""));
     String articleRegion = article.path("region").path("name").asText(daangnRegion.name());
+    boolean directBuy = isDirectBuyListing(article);
 
     return SearchListing.builder()
         .title(article.path("title").asText("제목 없음"))
         .price(price)
+        .priceValue(priceValue)
         .regionName(articleRegion)
         .searchedFrom(sequence + "번째 거점 · " + sourceRegion.getName() + " · " + daangnRegion.name())
         .postedAt(formatPostedAt(article.path("createdAt").asText("")))
         .url(href.isBlank() ? BASE_URL : href)
+        .directBuy(directBuy)
         .build();
   }
 
-  private String formatPrice(String rawPrice) {
+  private Long parsePrice(String rawPrice) {
     if (rawPrice == null || rawPrice.isBlank()) {
-      return "가격 정보 없음";
+      return null;
     }
     try {
-      long price = Math.round(Double.parseDouble(rawPrice));
-      if (price <= 0) {
-        return "나눔";
-      }
-      return PRICE_FORMAT.format(price) + "원";
+      return Math.round(Double.parseDouble(rawPrice));
     } catch (NumberFormatException e) {
-      return rawPrice;
+      return null;
     }
+  }
+
+  private String formatPrice(Long price, String rawPrice) {
+    if (price == null) {
+      return rawPrice == null || rawPrice.isBlank() ? "가격 정보 없음" : rawPrice;
+    }
+    if (price <= 0) {
+      return "나눔";
+    }
+    return PRICE_FORMAT.format(price) + "원";
   }
 
   private String formatPostedAt(String createdAt) {

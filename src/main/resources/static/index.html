@@ -25,6 +25,17 @@
 
         <button type="submit">검색</button>
       </form>
+
+      <div class="progress-panel" aria-label="검색 진행률">
+        <div>
+          <span>실행률</span>
+          <strong id="progressPercent">0%</strong>
+        </div>
+        <div class="progress-track">
+          <span id="progressBar"></span>
+        </div>
+        <p id="progressText">검색 대기 중</p>
+      </div>
     </section>
 
     <section class="workspace" aria-label="검색 결과">
@@ -83,7 +94,17 @@
         <section>
           <div class="section-head">
             <h2>검색 결과</h2>
-            <span id="listingCount">0건</span>
+            <div class="result-tools">
+              <label>
+                <span>정렬</span>
+                <select id="sortOrder">
+                  <option value="default">기본순</option>
+                  <option value="priceDesc">금액 높은순</option>
+                  <option value="priceAsc">금액 낮은순</option>
+                </select>
+              </label>
+              <span id="listingCount">0건</span>
+            </div>
           </div>
           <div id="listings" class="listings"></div>
         </section>
